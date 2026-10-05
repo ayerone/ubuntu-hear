@@ -1,0 +1,6 @@
+# Install torch first from the CPU-only wheel index (see the README install steps):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# openai-whisper depends on triton (~900 MB of GPU-only kernels that CPU
+# inference never uses), so the README steps uninstall it afterward. Re-running
+# `pip install -r requirements.txt` brings it back; uninstall it again.
+openai-whisper

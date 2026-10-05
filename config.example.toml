@@ -1,0 +1,17 @@
+# Copy to config.toml and edit. Every setting is optional; these are the defaults.
+# config.toml is read when the daemon starts, so run `./toggle_hear.sh kill` after editing it.
+
+# Whisper model. base.en is fast; small.en is more accurate but about 3x slower on CPU.
+model = "base.en"
+
+# Seconds of silence that end a phrase.
+pause_seconds = 0.8
+
+# Minimum RMS loudness (int16 scale) counted as speech. Raise it if background noise produces phantom text.
+speech_threshold = 250
+
+# Folder of .wav clips (relative to this project, or absolute). One is played at random before listening starts.
+sounds_dir = "sounds"
+
+# What espeak-ng says when sounds_dir has no clips.
+go_ahead_text = "go ahead"

@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+log/
+.claude/
+config.toml
+sounds/*.wav
