@@ -1,17 +1,21 @@
 # ubuntu-hear
 
-Hotkey speech-to-text for Ubuntu. Press a shortcut, talk, and your words are typed at the cursor in whatever window has focus. Transcription runs locally with [OpenAI Whisper](https://github.com/openai/whisper), on CPU only, with no network use after the model download.
+Local speech-to-text for Ubuntu. Talk, and your words are typed at the cursor in whatever window has focus, launched by a keyboard shortcut. Runs on CPU only.
 
-Each press of the shortcut toggles a session:
+Check out the dual to this project (text-to-speech) [ubuntu-say](https://github.com/ayerone/ubuntu-say).
+
+## Details
+
+Uses [OpenAI Whisper](https://github.com/openai/whisper) through PyTorch, with no network use after the model download.
+
+The first Hotkey (keyboard shortcut) press after login starts a background daemon (python process) that loads the model. Subsequent presses get a warm start (daemon already running). Each press toggles a session:
 
 - **Start:** a short ready clip plays (finished before the microphone opens), then it listens. Each phrase, ended by a pause, is transcribed and typed at the cursor.
 - **Stop:** the phrase in progress is still transcribed and typed, then the microphone closes.
 
-The first press after login starts a small background daemon that loads Whisper. The daemon stays resident, so every later press is a warm start.
-
 ## Tested on
 
-Ubuntu 24.04, GNOME on Wayland, Intel N150 (4 cores, no GPU), PipeWire. Other setups may need changes. The typing step uses `ydotool` because `wtype` does not work on GNOME.
+Ubuntu 24.04, GNOME on Wayland, Mini PC (Intel N150, 4 cores, no GPU), PipeWire. Other setups may need changes. The typing step uses `ydotool` because `wtype` does not work on GNOME.
 
 ## Install
 
@@ -63,7 +67,7 @@ Ubuntu 24.04, GNOME on Wayland, Intel N150 (4 cores, no GPU), PipeWire. Other se
 
 ## Usage
 
-Press the shortcut, wait for the ready clip to finish, and talk. Press it again to stop. A desktop notification shows "Listening" and "Stopped".
+Press the shortcut, wait for the ready clip to finish, and talk. Press it again to stop. A desktop notification stays on screen with "Listening" until you stop, then it changes to "Stopped" and clears itself. A session also stops by itself after the idle or maximum time in the settings below, and the notification then reads "Stopped (idle)" or "Stopped (time limit)".
 
 `toggle_hear.sh kill` shuts the background daemon down (it restarts on the next press). Run it by absolute path from anywhere, or symlink the script onto your PATH, for example `ln -s "$PWD/toggle_hear.sh" ~/.local/bin/hear`, then use `hear kill`. Daemon output goes to `~/.cache/ubuntu-hear/daemon.log`.
 
@@ -78,6 +82,8 @@ Copy `config.example.toml` to `config.toml` and edit it. `config.toml` is gitign
 | `speech_threshold` | `250` | Minimum RMS loudness (int16 scale) counted as speech. Raise it if background noise produces phantom text. |
 | `sounds_dir` | `sounds` | Folder of `.wav` clips for the start cue (see below). |
 | `go_ahead_text` | `go ahead` | What espeak-ng says when `sounds_dir` has no clips. |
+| `idle_timeout_seconds` | `10` | Seconds without speech before the session stops itself. `0` turns it off. |
+| `max_session_seconds` | `60` | Total session length before it stops itself, whatever the sound level. `0` turns it off. |
 
 The daemon reads the file at startup, so run `toggle_hear.sh kill` after editing it.
 

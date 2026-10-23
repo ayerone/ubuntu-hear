@@ -16,6 +16,8 @@ DEFAULTS = {
     "speech_threshold": 250,      # minimum RMS (int16 scale) counted as speech
     "sounds_dir": "sounds",       # .wav clips; one is played at random before listening
     "go_ahead_text": "go ahead",  # espeak-ng fallback when sounds_dir has no clips
+    "idle_timeout_seconds": 10,   # stop after this much silence (0 = never)
+    "max_session_seconds": 60,    # stop after this long regardless of sound (0 = never)
 }
 
 

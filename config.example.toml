@@ -15,3 +15,9 @@ sounds_dir = "sounds"
 
 # What espeak-ng says when sounds_dir has no clips.
 go_ahead_text = "go ahead"
+
+# Stop listening after this many seconds without speech. 0 turns it off.
+idle_timeout_seconds = 10
+
+# Stop listening after this many seconds in total, whatever the sound level. 0 turns it off.
+max_session_seconds = 60

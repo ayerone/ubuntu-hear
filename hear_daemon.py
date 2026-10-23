@@ -35,6 +35,8 @@ CONFIG = load_config()
 MODEL_NAME = CONFIG["model"]
 PAUSE_SECONDS = CONFIG["pause_seconds"]
 MIN_RMS = CONFIG["speech_threshold"]
+IDLE_TIMEOUT_SECONDS = CONFIG["idle_timeout_seconds"]
+MAX_SESSION_SECONDS = CONFIG["max_session_seconds"]
 
 SAMPLE_RATE = 16000  # what Whisper wants
 FRAME_SECONDS = 0.03
@@ -44,8 +46,10 @@ MIN_SPEECH_FRAMES = 10  # ~0.3s of voiced audio before an utterance is worth tra
 MAX_UTTERANCE_SECONDS = 25  # force a cut on someone who never pauses
 
 
-def notify(msg):
-    subprocess.run(["notify-send", "-t", "1500", "-h", "string:x-canonical-private-synchronous:ubuntu-hear",
+def notify(msg, persistent=False):
+    """Persistent toasts stay up until replaced; the shared synchronous hint makes the next notify() replace them."""
+    timing = ["-t", "0", "-u", "critical"] if persistent else ["-t", "1500"]
+    subprocess.run(["notify-send", *timing, "-h", "string:x-canonical-private-synchronous:ubuntu-hear",
                     "Hear", msg], check=False)
 
 
@@ -124,24 +128,26 @@ class Session:
         if self.stop.is_set():
             return
         self.transcriber.begin_session()
-        notify("Listening")
+        notify("Listening", persistent=True)
         rec = subprocess.Popen(
             ["pw-record", "--rate", str(SAMPLE_RATE), "--channels", "1", "--format", "s16", "-"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
         # pw-record is blocked on read() of the pipe; this unblocks it when stop is requested.
         threading.Thread(target=self._kill_on_stop, args=(rec,), daemon=True).start()
+        reason = ""
         try:
-            self._segment(rec.stdout)
+            reason = self._segment(rec.stdout)
         finally:
             rec.terminate()
-            notify("Stopped")
+            notify(f"Stopped ({reason})" if reason else "Stopped")
 
     def _kill_on_stop(self, rec):
         self.stop.wait()
         rec.terminate()
 
     def _segment(self, stream):
+        """Cut the stream into utterances until it ends or a timeout hits. Returns why it ended ("" if stopped by hand)."""
         preroll = []
         utterance = []  # frames, including trailing silence
         voiced = 0
@@ -149,6 +155,11 @@ class Session:
         noise_floor = MIN_RMS / 3
         pause_frames = int(PAUSE_SECONDS / FRAME_SECONDS)
         max_frames = int(MAX_UTTERANCE_SECONDS / FRAME_SECONDS)
+        idle_limit = int(IDLE_TIMEOUT_SECONDS / FRAME_SECONDS)  # 0 disables
+        session_limit = int(MAX_SESSION_SECONDS / FRAME_SECONDS)  # 0 disables
+        idle_run = 0  # consecutive non-speech frames
+        total = 0
+        reason = ""
 
         def flush():
             nonlocal utterance, voiced, silent_run
@@ -165,6 +176,16 @@ class Session:
             is_speech = rms > max(MIN_RMS, noise_floor * 3)
             if not is_speech:
                 noise_floor = 0.95 * noise_floor + 0.05 * rms
+                idle_run += 1
+            else:
+                idle_run = 0
+            total += 1
+            if idle_limit and idle_run >= idle_limit:
+                reason = "idle"
+                break
+            if session_limit and total >= session_limit:
+                reason = "time limit"
+                break
 
             if not utterance:
                 if is_speech:
@@ -186,6 +207,7 @@ class Session:
                 flush()
                 preroll = []
         flush()
+        return reason
 
 
 class Daemon:
