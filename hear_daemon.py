@@ -14,6 +14,8 @@ Not meant to be run directly -- hear_client.py starts it automatically.
 Settings live in config.toml next to this file (copy config.example.toml);
 hear_config.py documents the keys and their defaults.
 """
+import fcntl
+import glob
 import os
 import queue
 import random
@@ -22,6 +24,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 
 import numpy as np
 
@@ -44,6 +47,9 @@ FRAME_BYTES = int(SAMPLE_RATE * FRAME_SECONDS) * 2  # s16 mono
 PREROLL_FRAMES = 10  # ~0.3s kept from before speech starts so first words aren't clipped
 MIN_SPEECH_FRAMES = 10  # ~0.3s of voiced audio before an utterance is worth transcribing
 MAX_UTTERANCE_SECONDS = 25  # force a cut on someone who never pauses
+MODIFIER_WAIT_SECONDS = 2  # longest typing waits for held modifier keys to be released
+EV_KEY = 0x01
+MODIFIER_KEYS = (29, 97, 42, 54, 56, 100, 125, 126)  # L/R Ctrl, Shift, Alt, Super (linux input key codes)
 
 
 def notify(msg, persistent=False, replace_id=None):
@@ -83,7 +89,46 @@ def announce_ready():
         subprocess.run(["espeak-ng", CONFIG["go_ahead_text"]], check=False)
 
 
+def modifiers_held():
+    """True if a Ctrl/Alt/Shift/Super key is physically down on any keyboard.
+
+    Reads key state with the EVIOCGKEY ioctl on /dev/input/event* (the input group can read these, as ydotool needs).
+    Returns False when no device can be read, so a permissions problem never blocks typing.
+    """
+    ioc_read = 2 << 30
+    key_max_bytes = 0x300 // 8
+    eviocgkey = ioc_read | (key_max_bytes << 16) | (ord("E") << 8) | 0x18
+    eviocgbit_key = ioc_read | (key_max_bytes << 16) | (ord("E") << 8) | (0x20 + EV_KEY)
+    for path in glob.glob("/dev/input/event*"):
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        except OSError:
+            continue
+        try:
+            caps = bytearray(key_max_bytes)
+            fcntl.ioctl(fd, eviocgbit_key, caps)
+            if not any(caps[k // 8] >> (k % 8) & 1 for k in MODIFIER_KEYS):
+                continue  # not a keyboard
+            state = bytearray(key_max_bytes)
+            fcntl.ioctl(fd, eviocgkey, state)
+            if any(state[k // 8] >> (k % 8) & 1 for k in MODIFIER_KEYS):
+                return True
+        except OSError:
+            continue
+        finally:
+            os.close(fd)
+    return False
+
+
+def wait_for_modifiers_released():
+    """Hold typing back until the modifier keys are up, so a Ctrl+Alt hotkey does not turn the text into key combos."""
+    deadline = time.monotonic() + MODIFIER_WAIT_SECONDS
+    while time.monotonic() < deadline and modifiers_held():
+        time.sleep(0.02)
+
+
 def type_text(text):
+    wait_for_modifiers_released()
     subprocess.run(["ydotool", "type", "--key-delay", "2", "--", text], check=False)
 
 

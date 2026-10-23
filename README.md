@@ -101,7 +101,7 @@ Each session starts by playing one random `.wav` file from `sounds/`. The clips 
 
 - Text appears after you pause at the end of each phrase.
 - Phrase detection uses a simple adaptive loudness threshold, so steady loud noise can be mistaken for speech.
-- Stopping flushes the last phrase right after you press the shortcut. If the shortcut uses modifiers such as Ctrl+Alt and they are still held when the text is typed, the letters arrive as key combos, and a terminal can freeze briefly or show stray characters (Ctrl+S pauses terminal output). Release the keys before the text lands, or bind the shortcut to a single key with no modifiers, such as `Pause` or `Scroll Lock`.
+- Stopping flushes the last phrase right after you press the shortcut. Before typing, the daemon waits (up to 2 seconds) for any held Ctrl, Alt, Shift or Super key to be released, by reading key state from `/dev/input/event*`. This keeps a Ctrl+Alt shortcut from turning the text into key combos, which could freeze a terminal (Ctrl+S pauses terminal output). If that state cannot be read, typing proceeds without the wait, and a shortcut bound to a single key with no modifiers, such as `Pause` or `Scroll Lock`, avoids the problem entirely.
 
 ## License
 
