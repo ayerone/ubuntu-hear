@@ -1,12 +1,12 @@
 # ubuntu-hear
 
-Local speech-to-text for Ubuntu. Talk, and your words are typed at the cursor in whatever window has focus, launched by a keyboard shortcut. Runs on CPU only.
+Local speech-to-text for Ubuntu. Transcribe from your mic to the cursor in any app, launched by a keyboard shortcut. Runs on CPU.
 
 Check out the dual to this project (text-to-speech) [ubuntu-say](https://github.com/ayerone/ubuntu-say).
 
 ## Details
 
-Uses [OpenAI Whisper](https://github.com/openai/whisper) through PyTorch, with no network use after the model download.
+Uses [OpenAI Whisper](https://github.com/openai/whisper) and PyTorch.
 
 The first Hotkey (keyboard shortcut) press after login starts a background daemon (python process) that loads the model. Subsequent presses get a warm start (daemon already running). Each press toggles a session:
 
@@ -63,11 +63,11 @@ Ubuntu 24.04, GNOME on Wayland, Mini PC (Intel N150, 4 cores, no GPU), PipeWire.
 
    If `/dev/uinput` is not group-writable by `input` on your system, add a udev rule such as `KERNEL=="uinput", GROUP="input", MODE="0660"`.
 
-4. Bind a global keyboard shortcut (GNOME Settings, Keyboard, Custom Shortcuts) to the absolute path of `toggle_hear.sh` in this checkout.
+4. Bind a global keyboard shortcut (GNOME Settings, Keyboard, Custom Shortcuts) to the absolute path of `toggle_hear.sh` in this checkout. I chose ctrl-alt-v, which is reminiscent of ctrl-v.
 
 ## Usage
 
-Press the shortcut, wait for the ready clip to finish, and talk. Press it again to stop. A desktop notification stays on screen with "Listening" until you stop, then it changes to "Stopped" and clears itself. A session also stops by itself after the idle or maximum time in the settings below, and the notification then reads "Stopped (idle)" or "Stopped (time limit)".
+On a cold start (the first press after login, or after a kill) a notification reading "Loading STT..." stays up until Whisper has loaded. Press the shortcut, wait for the ready clip to finish, and talk. Press it again to stop. A desktop notification stays on screen with "Listening" until you stop, then it changes to "Stopped" and clears itself. A session also stops by itself after the idle or maximum time in the settings below, and the notification then reads "Stopped (idle)" or "Stopped (time limit)".
 
 `toggle_hear.sh kill` shuts the background daemon down (it restarts on the next press). Run it by absolute path from anywhere, or symlink the script onto your PATH, for example `ln -s "$PWD/toggle_hear.sh" ~/.local/bin/hear`, then use `hear kill`. Daemon output goes to `~/.cache/ubuntu-hear/daemon.log`.
 

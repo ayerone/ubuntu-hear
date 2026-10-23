@@ -46,11 +46,26 @@ MIN_SPEECH_FRAMES = 10  # ~0.3s of voiced audio before an utterance is worth tra
 MAX_UTTERANCE_SECONDS = 25  # force a cut on someone who never pauses
 
 
-def notify(msg, persistent=False):
-    """Persistent toasts stay up until replaced; the shared synchronous hint makes the next notify() replace them."""
-    timing = ["-t", "0", "-u", "critical"] if persistent else ["-t", "1500"]
-    subprocess.run(["notify-send", *timing, "-h", "string:x-canonical-private-synchronous:ubuntu-hear",
-                    "Hear", msg], check=False)
+def notify(msg, persistent=False, replace_id=None):
+    """Show a toast and return its id. Persistent toasts stay up until a later notify() passes that id as replace_id.
+
+    GNOME Shell ignores the x-canonical-private-synchronous hint, so replacement goes by id.
+    """
+    timing = ["-t", "0", "-u", "critical"] if persistent else ["-t", "1500", "-e"]
+    replace = ["-r", str(replace_id)] if replace_id else []
+    out = subprocess.run(["notify-send", "-p", *timing, *replace, "Hear", msg],
+                         capture_output=True, text=True, check=False).stdout.strip()
+    return int(out) if out.isdigit() else None
+
+
+def close_notification(nid):
+    """Close a toast by id over D-Bus."""
+    if nid is None:
+        return
+    subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications",
+                    "--object-path", "/org/freedesktop/Notifications",
+                    "--method", "org.freedesktop.Notifications.CloseNotification", str(nid)],
+                   capture_output=True, check=False)
 
 
 def announce_ready():
@@ -128,7 +143,7 @@ class Session:
         if self.stop.is_set():
             return
         self.transcriber.begin_session()
-        notify("Listening", persistent=True)
+        listening_id = notify("Listening", persistent=True)
         rec = subprocess.Popen(
             ["pw-record", "--rate", str(SAMPLE_RATE), "--channels", "1", "--format", "s16", "-"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -140,7 +155,7 @@ class Session:
             reason = self._segment(rec.stdout)
         finally:
             rec.terminate()
-            notify(f"Stopped ({reason})" if reason else "Stopped")
+            notify(f"Stopped ({reason})" if reason else "Stopped", replace_id=listening_id)
 
     def _kill_on_stop(self, rec):
         self.stop.wait()
@@ -251,6 +266,7 @@ def bind_socket():
 def main():
     # Bind first so clients that arrive during the model load queue up in the backlog.
     sock = bind_socket()
+    loading_id = notify("Loading STT...", persistent=True)
 
     def handle_term(signum, frame):
         sock.close()
@@ -259,10 +275,13 @@ def main():
     signal.signal(signal.SIGTERM, handle_term)
     signal.signal(signal.SIGINT, handle_term)
 
-    import torch
-    import whisper
-    torch.set_num_threads(os.cpu_count() or 4)
-    model = whisper.load_model(MODEL_NAME, device="cpu")
+    try:
+        import torch
+        import whisper
+        torch.set_num_threads(os.cpu_count() or 4)
+        model = whisper.load_model(MODEL_NAME, device="cpu")
+    finally:
+        close_notification(loading_id)
     daemon = Daemon(Transcriber(model))
 
     while True:
